@@ -1,4 +1,8 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CreateAppSettingDto } from './dto/create-app-setting.dto';
@@ -49,6 +53,63 @@ export class AppSettingsService {
     });
 
     return rows.map((row: AppSettingEntity) => this.toResponse(row));
+  }
+
+  async update(
+    id: string,
+    dto: CreateAppSettingDto,
+  ): Promise<AppSettingResponse> {
+    const setting = await this.appSettingRepository.findOne({ where: { id } });
+
+    if (!setting) {
+      throw new NotFoundException(`Setting with ID ${id} not found`);
+    }
+
+    setting.settingGroup = dto.settingGroup;
+    setting.settingKey = dto.settingKey;
+    setting.settingValue = dto.settingValue;
+    setting.valueType = dto.valueType;
+    setting.description = dto.description ?? null;
+    setting.isPublic = dto.isPublic;
+
+    const updatedSetting = await this.appSettingRepository.save(setting);
+
+    return this.toResponse(updatedSetting);
+  }
+
+  async delete(id: string): Promise<void> {
+    const setting = await this.appSettingRepository.findOne({ where: { id } });
+
+    if (!setting) {
+      throw new NotFoundException(`Setting with ID ${id} not found`);
+    }
+
+    await this.appSettingRepository.remove(setting);
+  }
+
+  async findByGroupAndKey(
+    settingGroup: string,
+    settingKey: string,
+  ): Promise<AppSettingResponse> {
+    const setting = await this.appSettingRepository.findOne({
+      where: { settingGroup, settingKey },
+    });
+
+    if (!setting) {
+      throw new NotFoundException(
+        `Setting not found: ${settingGroup}.${settingKey}`,
+      );
+    }
+
+    return this.toResponse(setting);
+  }
+
+  async findOne(id: string): Promise<AppSettingResponse> {
+    const setting = await this.appSettingRepository.findOne({ where: { id } });
+    if (!setting) {
+      throw new NotFoundException(`Setting with ID ${id} not found`);
+    }
+    return this.toResponse(setting);
   }
 
   private toResponse(entity: AppSettingEntity): AppSettingResponse {
