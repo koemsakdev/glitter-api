@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
 import { CategoryEntity, type CategoryType } from './entities/category.entity';
@@ -15,6 +17,8 @@ import {
   CategoryDetailResponse,
 } from './types/category-response.type';
 
+const CATEGORY_UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'categories');
+
 @Injectable()
 export class CategoriesService {
   constructor(
@@ -22,8 +26,10 @@ export class CategoriesService {
     private readonly categoryRepository: Repository<CategoryEntity>,
   ) {}
 
-  async create(dto: CreateCategoryDto): Promise<CategoryDetailResponse> {
-    // Check if slug already exists
+  async create(
+    dto: CreateCategoryDto,
+    iconFile?: Express.Multer.File,
+  ): Promise<CategoryDetailResponse> {
     const existingSlug = await this.categoryRepository.findOne({
       where: { slug: dto.slug },
     });
@@ -37,13 +43,18 @@ export class CategoriesService {
     const categoryType: CategoryType = dto.categoryType ?? 'main';
     const displayOrder: number = dto.displayOrder ?? 0;
 
+    let iconUrl: string | null = null;
+    if (iconFile) {
+      iconUrl = `/upload/categories/${iconFile.filename}`;
+    }
+
     const entity = this.categoryRepository.create({
       slug: dto.slug,
       nameEn: dto.nameEn,
       nameKm: dto.nameKm,
       descriptionEn: dto.descriptionEn ?? null,
       descriptionKm: dto.descriptionKm ?? null,
-      iconUrl: dto.iconUrl ?? null,
+      iconUrl,
       displayOrder,
       categoryType,
     });
@@ -151,6 +162,7 @@ export class CategoriesService {
   async update(
     id: string,
     dto: UpdateCategoryDto,
+    iconFile?: Express.Multer.File,
   ): Promise<CategoryDetailResponse> {
     const category = await this.categoryRepository.findOne({ where: { id } });
 
@@ -191,9 +203,17 @@ export class CategoriesService {
     if (dto.descriptionKm !== undefined) {
       category.descriptionKm = dto.descriptionKm;
     }
-    if (dto.iconUrl !== undefined) {
-      category.iconUrl = dto.iconUrl;
+
+    // Handle icon upload
+    if (iconFile) {
+      // Delete old icon file if exists
+      if (category.iconUrl) {
+        await this.deleteIconFile(category.iconUrl);
+      }
+      // Set new icon URL from multer filename
+      category.iconUrl = `/upload/categories/${iconFile.filename}`;
     }
+
     if (dto.displayOrder !== undefined && dto.displayOrder !== null) {
       category.displayOrder = dto.displayOrder;
     }
@@ -216,7 +236,45 @@ export class CategoriesService {
       throw new NotFoundException(`Category with ID ${id} not found`);
     }
 
+    // Delete icon file if exists
+    if (category.iconUrl) {
+      await this.deleteIconFile(category.iconUrl);
+    }
+
     await this.categoryRepository.remove(category);
+  }
+
+  /**
+   * Helper method to delete icon file from disk
+   */
+  private async deleteIconFile(iconUrl: string): Promise<void> {
+    try {
+      if (!iconUrl || !iconUrl.startsWith('/upload/categories/')) {
+        return; // Skip if path is invalid
+      }
+
+      // Extract filename from URL path
+      const filename = iconUrl.replace('/upload/categories/', '');
+      const filePath = path.join(CATEGORY_UPLOAD_DIR, filename);
+
+      // Check if file exists and delete
+      try {
+        await fs.unlink(filePath);
+      } catch (error) {
+        // File doesn't exist, that's fine
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          error.code === 'ENOENT'
+        ) {
+          return;
+        }
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error deleting icon file:', error);
+      // Don't throw error on deletion failure, just log it
+    }
   }
 
   async findMainCategories(): Promise<CategoryListResponse> {

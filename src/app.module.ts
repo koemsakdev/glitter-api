@@ -13,6 +13,12 @@ import { CategoriesModule } from './category/category.module';
 
 @Module({
   imports: [
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', 'uploads'),
+      serveRoot: '/upload',
+      exclude: ['/api*'],
+    }),
+
     ConfigModule.forRoot({
       isGlobal: true,
     }),
@@ -21,18 +27,12 @@ import { CategoriesModule } from './category/category.module';
       useFactory: (configService: ConfigService) => ({
         type: 'postgres',
         url: configService.get<string>('DATABASE_URL'),
-
         ssl: {
           rejectUnauthorized: false,
         },
-
         autoLoadEntities: true,
-        synchronize: true, // dev only
+        synchronize: true,
       }),
-    }),
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/uploads',
     }),
     AppSettingsModule,
     BrandsModule,
