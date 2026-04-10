@@ -6,7 +6,7 @@ import { join } from 'path';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AppSettingsModule } from './app-settings/app-settings.module';
-import { BrandsModule } from './brands/brands.module';
+// import { BrandsModule } from './brands/brands.module';
 import { BranchModule } from './branch/branch.module';
 import { StaffModule } from './staff/staff.module';
 import { CategoriesModule } from './category/category.module';
@@ -35,7 +35,7 @@ import { CategoriesModule } from './category/category.module';
       }),
     }),
     AppSettingsModule,
-    BrandsModule,
+    // BrandsModule,
     BranchModule,
     StaffModule,
     CategoriesModule,
