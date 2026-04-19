@@ -1,65 +1,272 @@
 import {
+  ConflictException,
   Injectable,
   NotFoundException,
-  ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm'; // Import InjectRepository
+import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 import { CreateBrandDto } from './dto/create-brand.dto';
-import { BrandEntity } from './entities/brand.entity';
+import { UpdateBrandDto } from './dto/update-brand.dto';
+import { BrandEntity, type BrandStatus } from './entities/brand.entity';
+import {
+  BrandResponse,
+  BrandListResponse,
+  BrandDetailResponse,
+} from './types/brand-response.type';
+
+const BRAND_UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'brands');
 
 @Injectable()
 export class BrandsService {
   constructor(
-    @InjectRepository(BrandEntity) // Inject the repository correctly here
-    private readonly brandRepository: Repository<BrandEntity>, // Access the repository through this
+    @InjectRepository(BrandEntity)
+    private readonly brandRepository: Repository<BrandEntity>,
   ) {}
 
-  // Create a new brand
-  async create(createBrandDto: CreateBrandDto): Promise<BrandEntity> {
-    const existingBrand = await this.brandRepository.findOne({
-      where: { name: createBrandDto.name },
+  async create(
+    dto: CreateBrandDto,
+    logoFile?: Express.Multer.File,
+  ): Promise<BrandDetailResponse> {
+    const existingSlug = await this.brandRepository.findOne({
+      where: { slug: dto.slug },
     });
 
-    if (existingBrand) {
-      throw new ConflictException('Brand already exists with this name');
+    if (existingSlug !== null) {
+      throw new ConflictException(
+        `Brand with slug "${dto.slug}" already exists`,
+      );
     }
 
-    const brand = this.brandRepository.create(createBrandDto);
-    await this.brandRepository.save(brand);
-    return brand;
+    const status: BrandStatus = dto.status ?? 'active';
+
+    let logoUrl: string | null = null;
+    if (logoFile) {
+      logoUrl = `/upload/brands/${logoFile.filename}`;
+    }
+
+    const entity = this.brandRepository.create({
+      slug: dto.slug,
+      name: dto.name,
+      logoUrl,
+      websiteUrl: dto.websiteUrl ?? null,
+      description: dto.description ?? null,
+      status,
+    });
+
+    const saved = await this.brandRepository.save(entity);
+    const brandData: BrandResponse = this.toResponse(saved);
+    return {
+      data: brandData,
+    };
   }
 
-  // Get all brands
-  async findAll(): Promise<BrandEntity[]> {
-    return await this.brandRepository.find();
+  async findAll(
+    page: number = 1,
+    limit: number = 10,
+  ): Promise<BrandListResponse> {
+    if (page < 1 || limit < 1) {
+      throw new BadRequestException('Page and limit must be greater than 0');
+    }
+
+    const skip = (page - 1) * limit;
+
+    const [brands, total] = await this.brandRepository.findAndCount({
+      skip,
+      take: limit,
+      order: {
+        name: 'ASC',
+        createdAt: 'DESC',
+      },
+    });
+
+    const mappedData: BrandResponse[] = brands.map((brand: BrandEntity) =>
+      this.toResponse(brand),
+    );
+
+    const response: BrandListResponse = {
+      data: mappedData,
+      total: Number(total),
+      page,
+      limit,
+    };
+    return response;
   }
 
-  // Get brand by ID
-  async findOneById(id: string): Promise<BrandEntity> {
+  async findOne(id: string): Promise<BrandDetailResponse> {
     const brand = await this.brandRepository.findOne({ where: { id } });
 
-    if (!brand) {
+    if (brand === null) {
       throw new NotFoundException(`Brand with ID ${id} not found`);
     }
 
-    return brand;
+    const brandData: BrandResponse = this.toResponse(brand);
+    return {
+      data: brandData,
+    };
   }
 
-  // Update a brand by ID
+  async findBySlug(slug: string): Promise<BrandDetailResponse> {
+    const brand = await this.brandRepository.findOne({
+      where: { slug },
+    });
+
+    if (brand === null) {
+      throw new NotFoundException(`Brand with slug "${slug}" not found`);
+    }
+
+    const brandData: BrandResponse = this.toResponse(brand);
+    return {
+      data: brandData,
+    };
+  }
+
+  async findActive(): Promise<BrandListResponse> {
+    const [brands, total] = await this.brandRepository.findAndCount({
+      where: { status: 'active' },
+      order: {
+        name: 'ASC',
+      },
+    });
+
+    const mappedData: BrandResponse[] = brands.map((brand: BrandEntity) =>
+      this.toResponse(brand),
+    );
+
+    const response: BrandListResponse = {
+      data: mappedData,
+      total: Number(total),
+      page: 1,
+      limit: Number(total),
+    };
+    return response;
+  }
+
   async update(
     id: string,
-    createBrandDto: CreateBrandDto,
-  ): Promise<BrandEntity> {
-    const brand = await this.findOneById(id);
-    Object.assign(brand, createBrandDto); // Update the existing brand with new data
-    await this.brandRepository.save(brand);
-    return brand;
+    dto: UpdateBrandDto,
+    logoFile?: Express.Multer.File,
+  ): Promise<BrandDetailResponse> {
+    const brand = await this.brandRepository.findOne({ where: { id } });
+
+    if (brand === null) {
+      throw new NotFoundException(`Brand with ID ${id} not found`);
+    }
+
+    // Check if new slug is already in use
+    if (
+      dto.slug !== undefined &&
+      dto.slug !== null &&
+      dto.slug !== brand.slug
+    ) {
+      const existingSlug = await this.brandRepository.findOne({
+        where: { slug: dto.slug },
+      });
+
+      if (existingSlug !== null) {
+        throw new ConflictException(
+          `Brand with slug "${dto.slug}" already exists`,
+        );
+      }
+    }
+
+    // Update only provided fields
+    if (dto.slug !== undefined && dto.slug !== null) {
+      brand.slug = dto.slug;
+    }
+    if (dto.name !== undefined && dto.name !== null) {
+      brand.name = dto.name;
+    }
+    if (dto.websiteUrl !== undefined) {
+      brand.websiteUrl = dto.websiteUrl ?? null;
+    }
+    if (dto.description !== undefined) {
+      brand.description = dto.description ?? null;
+    }
+    if (dto.status !== undefined && dto.status !== null) {
+      brand.status = dto.status;
+    }
+
+    // Handle logo upload
+    if (logoFile) {
+      // Delete old logo file if exists
+      if (brand.logoUrl) {
+        await this.deleteLogoFile(brand.logoUrl);
+      }
+      // Set new logo URL from multer filename
+      brand.logoUrl = `/upload/brands/${logoFile.filename}`;
+    }
+
+    const updated = await this.brandRepository.save(brand);
+
+    const brandData: BrandResponse = this.toResponse(updated);
+    return {
+      data: brandData,
+    };
   }
 
-  // Delete a brand by ID
   async delete(id: string): Promise<void> {
-    const brand = await this.findOneById(id);
+    const brand = await this.brandRepository.findOne({ where: { id } });
+
+    if (brand === null) {
+      throw new NotFoundException(`Brand with ID ${id} not found`);
+    }
+
+    // Delete logo file if exists
+    if (brand.logoUrl) {
+      await this.deleteLogoFile(brand.logoUrl);
+    }
+
     await this.brandRepository.remove(brand);
+  }
+
+  /**
+   * Helper method to delete logo file from disk
+   */
+  private async deleteLogoFile(logoUrl: string): Promise<void> {
+    try {
+      if (!logoUrl || !logoUrl.startsWith('/upload/brands/')) {
+        return; // Skip if path is invalid
+      }
+
+      // Extract filename from URL path
+      const filename = logoUrl.replace('/upload/brands/', '');
+      const filePath = path.join(BRAND_UPLOAD_DIR, filename);
+
+      // Check if file exists and delete
+      try {
+        await fs.unlink(filePath);
+      } catch (error) {
+        // File doesn't exist, that's fine
+        if (
+          error instanceof Error &&
+          'code' in error &&
+          error.code === 'ENOENT'
+        ) {
+          return;
+        }
+        throw error;
+      }
+    } catch (error) {
+      console.error('Error deleting logo file:', error);
+      // Don't throw error on deletion failure, just log it
+    }
+  }
+
+  private toResponse(entity: BrandEntity): BrandResponse {
+    const response: BrandResponse = {
+      id: entity.id,
+      slug: entity.slug,
+      name: entity.name,
+      logoUrl: entity.logoUrl,
+      websiteUrl: entity.websiteUrl,
+      description: entity.description,
+      status: entity.status,
+      createdAt: entity.createdAt,
+      updatedAt: entity.updatedAt,
+    };
+    return response;
   }
 }

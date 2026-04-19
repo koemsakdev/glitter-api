@@ -1,32 +1,56 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsBoolean, IsNotEmpty, IsOptional, IsString } from 'class-validator';
+import {
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MaxLength,
+} from 'class-validator';
+import type { BrandStatus } from '../entities/brand.entity';
 
 export class CreateBrandDto {
   @ApiProperty({
-    example: 'CHANEL',
+    description: 'URL-friendly slug (unique)',
+    example: 'gucci',
   })
   @IsString()
   @IsNotEmpty()
+  @MaxLength(150)
+  slug!: string;
+
+  @ApiProperty({
+    description: 'Brand name',
+    example: 'Gucci',
+  })
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(150)
   name!: string;
 
   @ApiPropertyOptional({
-    example: 'https://www.chanel.com/sg',
+    description: 'Brand website URL',
+    example: 'https://www.gucci.com',
+  })
+  @IsOptional()
+  @IsUrl()
+  @MaxLength(500)
+  websiteUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Brand description',
+    example: 'Italian luxury fashion house founded in 1921',
   })
   @IsOptional()
   @IsString()
   description?: string;
 
   @ApiPropertyOptional({
-    example:
-      'https://upload.wikimedia.org/wikipedia/en/thumb/9/92/Chanel_logo_interlocking_cs.svg/1280px-Chanel_logo_interlocking_cs.svg.png',
+    description: 'Brand status',
+    enum: ['active', 'inactive'],
+    default: 'active',
   })
   @IsOptional()
-  @IsString()
-  logoUrl?: string;
-
-  @ApiProperty({
-    example: true,
-  })
-  @IsBoolean()
-  isActive!: boolean;
+  @IsEnum(['active', 'inactive'])
+  status?: BrandStatus;
 }
