@@ -15,6 +15,7 @@ import { ProductImagesModule } from './product-images/product-image.module';
 import { ProductVariantsModule } from './product-variants/product-variant.module';
 import { InventoryBranchModule } from './inventory-branch/inventory-branch.module';
 import { ProductBadgesModule } from './product-badges/product-badge.module';
+import { UsersModule } from './users/user.module';
 
 @Module({
   imports: [
@@ -49,6 +50,7 @@ import { ProductBadgesModule } from './product-badges/product-badge.module';
     ProductVariantsModule,
     InventoryBranchModule,
     ProductBadgesModule,
+    UsersModule,
   ],
   controllers: [AppController],
   providers: [AppService],
