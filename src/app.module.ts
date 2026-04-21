@@ -1,47 +1,65 @@
+/**
+ * ============================================================================
+ * APP MODULE — SECURITY MODEL
+ * ============================================================================
+ *
+ * JwtAuthGuard is registered GLOBALLY via APP_GUARD below.
+ * This means EVERY endpoint requires a valid JWT by default.
+ *
+ * To make an endpoint public, add the @Public() decorator:
+ *   @Public()
+ *   @Get('public-products')
+ *   listProducts() {...}
+ *
+ * For role-based access, add @UseGuards(RolesGuard) + @Roles() to the endpoint:
+ *   @UseGuards(RolesGuard)
+ *   @Roles('admin', 'super_admin')
+ *   @Post()
+ *   createProduct() {...}
+ *
+ * (RolesGuard is NOT global because it would fail on routes without @Roles,
+ *  and most routes don't need role checking beyond "logged in".)
+ *
+ * ============================================================================
+ */
 import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
-import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { join } from 'path';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { AddressesModule } from './addresses/address.module';
 import { AppSettingsModule } from './app-settings/app-settings.module';
-import { BrandsModule } from './brands/brands.module';
+import { AuthModule } from './auth/auth.module';
+import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import { BranchModule } from './branch/branch.module';
-import { StaffModule } from './staff/staff.module';
+import { BrandsModule } from './brands/brands.module';
 import { CategoriesModule } from './category/category.module';
-import { ProductsModule } from './products/product.module';
-import { ProductImagesModule } from './product-images/product-image.module';
-import { ProductVariantsModule } from './product-variants/product-variant.module';
 import { InventoryBranchModule } from './inventory-branch/inventory-branch.module';
 import { ProductBadgesModule } from './product-badges/product-badge.module';
+import { ProductImagesModule } from './product-images/product-image.module';
+import { ProductVariantsModule } from './product-variants/product-variant.module';
+import { ProductsModule } from './products/product.module';
+import { StaffModule } from './staff/staff.module';
 import { UsersModule } from './users/user.module';
-import { AuthModule } from './auth/auth.module';
-import { AddressesModule } from './addresses/address.module';
 
 @Module({
   imports: [
-    ServeStaticModule.forRoot({
-      rootPath: join(__dirname, '..', 'uploads'),
-      serveRoot: '/upload',
-      exclude: ['/api*'],
-    }),
-
-    ConfigModule.forRoot({
-      isGlobal: true,
-    }),
+    ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
+      useFactory: () => ({
         type: 'postgres',
-        url: configService.get<string>('DATABASE_URL'),
-        ssl: {
-          rejectUnauthorized: false,
-        },
+        url: process.env.DATABASE_URL,
         autoLoadEntities: true,
-        synchronize: true,
+        synchronize: true, // dev only — use migrations in prod
+        ssl: { rejectUnauthorized: false },
       }),
     }),
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/upload',
+    }),
+    // Business modules
     AppSettingsModule,
     BranchModule,
     StaffModule,
@@ -50,13 +68,17 @@ import { AddressesModule } from './addresses/address.module';
     ProductsModule,
     ProductImagesModule,
     ProductVariantsModule,
-    InventoryBranchModule,
     ProductBadgesModule,
+    InventoryBranchModule,
     UsersModule,
     AuthModule,
     AddressesModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
+    },
+  ],
 })
 export class AppModule {}

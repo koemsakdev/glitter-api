@@ -5,7 +5,6 @@ import {
   HttpCode,
   HttpStatus,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiBearerAuth,
@@ -29,7 +28,6 @@ import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserDetailResponseDto } from '../users/dto/user-response.dto';
 
 @ApiTags('Auth')
@@ -41,7 +39,7 @@ export class AuthController {
   ) {}
 
   // ==========================================================================
-  // EMAIL + PASSWORD
+  // PUBLIC ENDPOINTS (no auth required)
   // ==========================================================================
 
   @Public()
@@ -50,7 +48,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Register a new customer account (email + password)',
     description:
-      'Creates a customer account. Self-registration always creates role="customer". For staff/admin accounts, use POST /api/users (requires admin permissions).',
+      'Creates a customer account. Always creates role="customer". For staff/admin, admin must use POST /api/users.',
   })
   @ApiBody({ type: RegisterDto })
   @ApiResponse({ status: 201, type: AuthResponseDto })
@@ -73,7 +71,7 @@ export class AuthController {
   @ApiOperation({
     summary: 'Login with email + password',
     description:
-      "Works for ALL roles (customer, cashier, manager, admin, super_admin). The returned JWT includes the user's role.",
+      "Works for all roles. Returns JWT that includes the user's role.",
   })
   @ApiBody({ type: LoginDto })
   @ApiResponse({ status: 200, type: AuthResponseDto })
@@ -87,17 +85,13 @@ export class AuthController {
     };
   }
 
-  // ==========================================================================
-  // GOOGLE LOGIN
-  // ==========================================================================
-
   @Public()
   @Post('google')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Login or signup with Google',
     description:
-      'Client-side OAuth flow. Frontend uses Google Sign-In JavaScript library to get an ID token, then sends it here. First-time users are auto-registered as customers.',
+      'Client-side OAuth. Frontend gets Google ID token, sends it here. First-time users auto-registered as customers.',
   })
   @ApiBody({ type: GoogleLoginDto })
   @ApiResponse({ status: 200, type: AuthResponseDto })
@@ -113,17 +107,13 @@ export class AuthController {
     };
   }
 
-  // ==========================================================================
-  // REFRESH + LOGOUT
-  // ==========================================================================
-
   @Public()
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Refresh access token',
     description:
-      'Exchange a refresh token for a new access+refresh token pair. Use when your access token expires (15 minutes by default).',
+      'Exchange a refresh token for a new access+refresh token pair.',
   })
   @ApiBody({ type: RefreshTokenDto })
   @ApiResponse({ status: 200, type: RefreshResponseDto })
@@ -133,14 +123,16 @@ export class AuthController {
     return { tokens };
   }
 
-  @UseGuards(JwtAuthGuard)
+  // ==========================================================================
+  // AUTHENTICATED ENDPOINTS (global JwtAuthGuard applies)
+  // ==========================================================================
+
   @ApiBearerAuth()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Logout from all devices',
-    description:
-      'Invalidates ALL tokens for this user (including on other devices). They must log in again everywhere.',
+    description: 'Invalidates ALL tokens for this user (on any device).',
   })
   @ApiResponse({ status: 200 })
   async logout(@CurrentUser('id') userId: string): Promise<{ ok: true }> {
@@ -148,18 +140,13 @@ export class AuthController {
     return { ok: true };
   }
 
-  // ==========================================================================
-  // PROFILE
-  // ==========================================================================
-
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Get('me')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Get current user profile',
     description:
-      "Returns the logged-in user's full profile including linked providers and whether the profile is complete. Frontend calls this after login to decide what to show.",
+      "Returns the logged-in user's full profile including linked providers and isProfileComplete flag.",
   })
   @ApiResponse({ status: 200, type: UserDetailResponseDto })
   async me(@CurrentUser() user: UserEntity): Promise<CurrentUserResponseDto> {
@@ -167,14 +154,13 @@ export class AuthController {
     return { data: result.data };
   }
 
-  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @Post('change-password')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Change your password',
     description:
-      'Requires the current password. On success, ALL existing tokens are invalidated — user must log in again.',
+      'Requires current password. All existing tokens are invalidated on success.',
   })
   @ApiBody({ type: ChangePasswordDto })
   @ApiResponse({ status: 200 })

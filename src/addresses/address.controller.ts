@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -12,12 +13,19 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  ApiBearerAuth,
   ApiBody,
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import {
+  assertOwnerOrAdmin,
+  isAdmin,
+} from '../common/helpers/ownership.helper';
+import { UserEntity } from '../users/entities/user.entity';
 import { AddressesService } from './address.service';
 import { AddressQueryDto } from './dto/address-query.dto';
 import {
@@ -32,67 +40,99 @@ import {
 } from './types/address-response.type';
 
 @ApiTags('Addresses')
+@ApiBearerAuth()
 @Controller('api/addresses')
 export class AddressesController {
   constructor(private readonly addressesService: AddressesService) {}
 
+  /**
+   * Users can create addresses for THEMSELVES.
+   * Admins can create addresses on behalf of any user (for customer support).
+   */
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({
     summary: 'Create an address',
     description:
-      'Saves a shipping/billing address for a user. If isDefaultShipping or isDefaultBilling is true, any existing default of that type is automatically unset.',
+      'Users create addresses for themselves (userId must match current user). Admins can specify any userId.',
   })
   @ApiBody({ type: CreateAddressDto })
   @ApiResponse({ status: 201, type: AddressDetailResponseDto })
-  async create(@Body() dto: CreateAddressDto): Promise<AddressDetailResponse> {
+  async create(
+    @Body() dto: CreateAddressDto,
+    @CurrentUser() currentUser: UserEntity,
+  ): Promise<AddressDetailResponse> {
+    // Non-admins can only create addresses for themselves
+    if (!isAdmin(currentUser) && dto.userId !== currentUser.id) {
+      throw new ForbiddenException(
+        'You can only create addresses for yourself',
+      );
+    }
     return this.addressesService.create(dto);
   }
 
+  /**
+   * Users see their own addresses. Admins see any.
+   * If no userId filter is provided and user is not admin, auto-filter to self.
+   */
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'List addresses',
     description:
-      'Filter by userId, province, type, or default flags. Results are sorted with defaults first.',
+      'Filter by userId. Non-admins can only list their own addresses.',
   })
   @ApiResponse({ status: 200, type: AddressListResponseDto })
-  async findAll(@Query() query: AddressQueryDto): Promise<AddressListResponse> {
+  async findAll(
+    @Query() query: AddressQueryDto,
+    @CurrentUser() currentUser: UserEntity,
+  ): Promise<AddressListResponse> {
+    if (!isAdmin(currentUser)) {
+      // Force filter to current user, regardless of what was passed
+      query.userId = currentUser.id;
+    }
     return this.addressesService.findAll(query);
   }
 
   @Get('user/:userId/default-shipping')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: "Get user's default shipping address",
-    description:
-      "Returns the user's default shipping address, or 404 if none is set. Useful for pre-filling the checkout form.",
-  })
+  @ApiOperation({ summary: "Get a user's default shipping address" })
   @ApiParam({ name: 'userId', type: String })
   @ApiResponse({ status: 200, type: AddressDetailResponseDto })
   @ApiResponse({ status: 404, description: 'No default shipping address' })
   async findDefaultShipping(
     @Param('userId') userId: string,
+    @CurrentUser() currentUser: UserEntity,
   ): Promise<AddressDetailResponse> {
+    assertOwnerOrAdmin(
+      currentUser,
+      userId,
+      'You can only view your own default shipping address',
+    );
     const result = await this.addressesService.findDefaultShipping(userId);
     if (result === null) {
-      throw new NotFoundException('User has no default shipping address set');
+      throw new NotFoundException('No default shipping address set');
     }
     return result;
   }
 
   @Get('user/:userId/default-billing')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: "Get user's default billing address" })
+  @ApiOperation({ summary: "Get a user's default billing address" })
   @ApiParam({ name: 'userId', type: String })
   @ApiResponse({ status: 200, type: AddressDetailResponseDto })
-  @ApiResponse({ status: 404, description: 'No default billing address' })
   async findDefaultBilling(
     @Param('userId') userId: string,
+    @CurrentUser() currentUser: UserEntity,
   ): Promise<AddressDetailResponse> {
+    assertOwnerOrAdmin(
+      currentUser,
+      userId,
+      'You can only view your own default billing address',
+    );
     const result = await this.addressesService.findDefaultBilling(userId);
     if (result === null) {
-      throw new NotFoundException('User has no default billing address set');
+      throw new NotFoundException('No default billing address set');
     }
     return result;
   }
@@ -102,65 +142,90 @@ export class AddressesController {
   @ApiOperation({ summary: 'Get an address by ID' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: AddressDetailResponseDto })
-  async findOne(@Param('id') id: string): Promise<AddressDetailResponse> {
-    return this.addressesService.findOne(id);
+  async findOne(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: UserEntity,
+  ): Promise<AddressDetailResponse> {
+    const result = await this.addressesService.findOne(id);
+    assertOwnerOrAdmin(
+      currentUser,
+      result.data.userId,
+      'You can only view your own addresses',
+    );
+    return result;
   }
 
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: 'Update an address',
-    description:
-      'Update any field. Setting isDefaultShipping/isDefaultBilling to true automatically unsets the same type on other addresses.',
-  })
+  @ApiOperation({ summary: 'Update an address' })
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: UpdateAddressDto })
   @ApiResponse({ status: 200, type: AddressDetailResponseDto })
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateAddressDto,
+    @CurrentUser() currentUser: UserEntity,
   ): Promise<AddressDetailResponse> {
+    const existing = await this.addressesService.findOne(id);
+    assertOwnerOrAdmin(
+      currentUser,
+      existing.data.userId,
+      'You can only update your own addresses',
+    );
     return this.addressesService.update(id, dto);
   }
 
   @Patch(':id/set-default-shipping')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: "Mark this address as the user's default shipping",
-    description:
-      "Convenience endpoint. Sets isDefaultShipping=true on this address and false on the user's other addresses.",
-  })
+  @ApiOperation({ summary: 'Mark as default shipping' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: AddressDetailResponseDto })
   async setAsDefaultShipping(
     @Param('id') id: string,
+    @CurrentUser() currentUser: UserEntity,
   ): Promise<AddressDetailResponse> {
+    const existing = await this.addressesService.findOne(id);
+    assertOwnerOrAdmin(
+      currentUser,
+      existing.data.userId,
+      'You can only modify your own addresses',
+    );
     return this.addressesService.setAsDefaultShipping(id);
   }
 
   @Patch(':id/set-default-billing')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({
-    summary: "Mark this address as the user's default billing",
-  })
+  @ApiOperation({ summary: 'Mark as default billing' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: AddressDetailResponseDto })
   async setAsDefaultBilling(
     @Param('id') id: string,
+    @CurrentUser() currentUser: UserEntity,
   ): Promise<AddressDetailResponse> {
+    const existing = await this.addressesService.findOne(id);
+    assertOwnerOrAdmin(
+      currentUser,
+      existing.data.userId,
+      'You can only modify your own addresses',
+    );
     return this.addressesService.setAsDefaultBilling(id);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({
-    summary: 'Delete an address',
-    description:
-      'Permanent deletion. Will fail if this address is referenced by existing orders (FK constraint).',
-  })
+  @ApiOperation({ summary: 'Delete an address' })
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 204 })
-  async delete(@Param('id') id: string): Promise<void> {
+  async delete(
+    @Param('id') id: string,
+    @CurrentUser() currentUser: UserEntity,
+  ): Promise<void> {
+    const existing = await this.addressesService.findOne(id);
+    assertOwnerOrAdmin(
+      currentUser,
+      existing.data.userId,
+      'You can only delete your own addresses',
+    );
     return this.addressesService.delete(id);
   }
 }
