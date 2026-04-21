@@ -1,7 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
-import type { AccountStatus } from '../entities/user.entity';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Min,
+} from 'class-validator';
+import type { AccountStatus, UserRole } from '../entities/user.entity';
 import type { AuthProvider } from '../entities/auth-account.entity';
 
 export class UserQueryDto {
@@ -30,8 +37,21 @@ export class UserQueryDto {
   accountStatus?: AccountStatus;
 
   @ApiPropertyOptional({
+    enum: ['customer', 'cashier', 'manager', 'admin', 'super_admin'],
+    description: 'Filter by role',
+  })
+  @IsOptional()
+  @IsEnum(['customer', 'cashier', 'manager', 'admin', 'super_admin'])
+  role?: UserRole;
+
+  @ApiPropertyOptional({ description: 'Filter by assigned branch UUID' })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
+  @ApiPropertyOptional({
     enum: ['email', 'google', 'facebook', 'apple', 'telegram'],
-    description: 'Filter by users who signed up with this provider',
+    description: 'Filter by linked provider',
   })
   @IsOptional()
   @IsEnum(['email', 'google', 'facebook', 'apple', 'telegram'])

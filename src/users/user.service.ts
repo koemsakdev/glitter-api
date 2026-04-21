@@ -6,11 +6,14 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
+import { promises as fs } from 'fs';
+import * as path from 'path';
 import { hashPassword } from '../auth/helpers/password.helper';
+import { BranchEntity } from '../branch/entities/branch.entity';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { UserQueryDto } from './dto/user-query.dto';
-import { UserEntity } from './entities/user.entity';
+import { UserEntity, UserRole } from './entities/user.entity';
 import {
   AuthAccountEntity,
   AuthProvider,
@@ -21,10 +24,14 @@ import {
   UserResponse,
 } from './types/user-response.type';
 
-/**
- * Data needed to create/link an OAuth account.
- * The Auth service builds this from each provider's callback response.
- */
+const AVATAR_UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'avatars');
+
+// Roles that must be tied to a branch
+const BRANCH_REQUIRED_ROLES: UserRole[] = ['cashier', 'manager'];
+
+// Roles that must NOT have a branch (they work across branches)
+const BRANCH_FORBIDDEN_ROLES: UserRole[] = ['customer', 'admin', 'super_admin'];
+
 export interface OAuthProfileData {
   provider: AuthProvider;
   providerAccountId: string;
@@ -44,6 +51,8 @@ export class UsersService {
     private readonly userRepository: Repository<UserEntity>,
     @InjectRepository(AuthAccountEntity)
     private readonly authAccountRepository: Repository<AuthAccountEntity>,
+    @InjectRepository(BranchEntity)
+    private readonly branchRepository: Repository<BranchEntity>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -74,11 +83,17 @@ export class UsersService {
       }
     }
 
+    const role: UserRole = dto.role ?? 'customer';
+    await this.validateRoleBranchCombination(role, dto.branchId ?? null);
+
     const entity = this.userRepository.create({
       email: dto.email ? dto.email.toLowerCase() : null,
       phoneNumber: dto.phoneNumber ?? null,
       fullName: dto.fullName,
-      profileImageUrl: dto.profileImageUrl ?? null,
+      profileImageUrl: null,
+      profileImageSource: 'none',
+      role,
+      branchId: dto.branchId ?? null,
       accountStatus: dto.accountStatus ?? 'active',
       emailVerifiedAt: null,
       phoneVerifiedAt: null,
@@ -87,7 +102,7 @@ export class UsersService {
     entity.isProfileComplete = this.computeProfileComplete(entity);
 
     const saved = await this.userRepository.save(entity);
-    return { data: await this.toResponseWithProviders(saved) };
+    return { data: await this.toResponseWithRelations(saved) };
   }
 
   async findAll(query: UserQueryDto): Promise<UserListResponse> {
@@ -102,12 +117,21 @@ export class UsersService {
 
     const qb = this.userRepository
       .createQueryBuilder('user')
-      .leftJoinAndSelect('user.authAccounts', 'authAccounts');
+      .leftJoinAndSelect('user.authAccounts', 'authAccounts')
+      .leftJoinAndSelect('user.branch', 'branch');
 
     if (query.accountStatus) {
       qb.andWhere('user.accountStatus = :accountStatus', {
         accountStatus: query.accountStatus,
       });
+    }
+
+    if (query.role) {
+      qb.andWhere('user.role = :role', { role: query.role });
+    }
+
+    if (query.branchId) {
+      qb.andWhere('user.branchId = :branchId', { branchId: query.branchId });
     }
 
     if (query.search) {
@@ -139,7 +163,7 @@ export class UsersService {
   async findOne(id: string): Promise<UserDetailResponse> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: ['authAccounts'],
+      relations: ['authAccounts', 'branch'],
     });
 
     if (user === null) {
@@ -152,7 +176,7 @@ export class UsersService {
   async findByEmail(email: string): Promise<UserDetailResponse> {
     const user = await this.userRepository.findOne({
       where: { email: email.toLowerCase() },
-      relations: ['authAccounts'],
+      relations: ['authAccounts', 'branch'],
     });
 
     if (user === null) {
@@ -165,7 +189,7 @@ export class UsersService {
   async update(id: string, dto: UpdateUserDto): Promise<UserDetailResponse> {
     const user = await this.userRepository.findOne({
       where: { id },
-      relations: ['authAccounts'],
+      relations: ['authAccounts', 'branch'],
     });
 
     if (user === null) {
@@ -182,7 +206,7 @@ export class UsersService {
         );
       }
       user.email = dto.email.toLowerCase();
-      user.emailVerifiedAt = null; // re-verification required on email change
+      user.emailVerifiedAt = null;
     }
 
     if (dto.phoneNumber && dto.phoneNumber !== user.phoneNumber) {
@@ -199,15 +223,95 @@ export class UsersService {
     }
 
     if (dto.fullName !== undefined) user.fullName = dto.fullName;
-    if (dto.profileImageUrl !== undefined)
-      user.profileImageUrl = dto.profileImageUrl;
     if (dto.accountStatus !== undefined) user.accountStatus = dto.accountStatus;
+
+    // Role/branch changes need validation
+    const newRole = dto.role ?? user.role;
+    const newBranchId =
+      dto.branchId !== undefined ? dto.branchId : user.branchId;
+
+    if (dto.role !== undefined || dto.branchId !== undefined) {
+      await this.validateRoleBranchCombination(newRole, newBranchId);
+
+      if (dto.role !== undefined) {
+        // Role change invalidates tokens so new permissions take effect
+        user.role = newRole;
+        user.tokenVersion += 1;
+      }
+      if (dto.branchId !== undefined) {
+        user.branchId = dto.branchId ?? null;
+      }
+    }
 
     user.isProfileComplete = this.computeProfileComplete(user);
 
     const updated = await this.userRepository.save(user);
-    return { data: await this.toResponseWithProviders(updated) };
+    return { data: await this.toResponseWithRelations(updated) };
   }
+
+  // ==========================================================================
+  // AVATAR
+  // ==========================================================================
+
+  async uploadAvatar(
+    id: string,
+    file: Express.Multer.File,
+  ): Promise<UserDetailResponse> {
+    if (!file) {
+      throw new BadRequestException('Avatar file is required');
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: ['authAccounts', 'branch'],
+    });
+
+    if (user === null) {
+      await this.deleteFileByFilename(file.filename);
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    if (
+      user.profileImageSource === 'uploaded' &&
+      user.profileImageUrl !== null
+    ) {
+      await this.deleteAvatarFile(user.profileImageUrl);
+    }
+
+    user.profileImageUrl = `/upload/avatars/${file.filename}`;
+    user.profileImageSource = 'uploaded';
+
+    const updated = await this.userRepository.save(user);
+    return { data: await this.toResponseWithRelations(updated) };
+  }
+
+  async removeAvatar(id: string): Promise<UserDetailResponse> {
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: ['authAccounts', 'branch'],
+    });
+
+    if (user === null) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    if (
+      user.profileImageSource === 'uploaded' &&
+      user.profileImageUrl !== null
+    ) {
+      await this.deleteAvatarFile(user.profileImageUrl);
+    }
+
+    user.profileImageUrl = null;
+    user.profileImageSource = 'none';
+
+    const updated = await this.userRepository.save(user);
+    return { data: await this.toResponseWithRelations(updated) };
+  }
+
+  // ==========================================================================
+  // DELETE
+  // ==========================================================================
 
   async softDelete(id: string): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id } });
@@ -228,16 +332,23 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
+    if (
+      user.profileImageSource === 'uploaded' &&
+      user.profileImageUrl !== null
+    ) {
+      await this.deleteAvatarFile(user.profileImageUrl);
+    }
+
     await this.userRepository.remove(user);
   }
 
   // ==========================================================================
-  // AUTH-FACING METHODS (called by AuthService)
+  // AUTH-FACING METHODS
   // ==========================================================================
 
   /**
-   * Register a new user with email + password.
-   * Creates both UserEntity and an AuthAccountEntity with provider='email'.
+   * Register via email+password — ALWAYS creates role='customer'.
+   * Self-registration can never create staff/admin accounts.
    */
   async registerWithEmail(params: {
     email: string;
@@ -251,7 +362,6 @@ export class UsersService {
 
       const normalizedEmail = params.email.toLowerCase();
 
-      // Check for existing user with this email
       const existingUser = await userRepo.findOne({
         where: { email: normalizedEmail },
       });
@@ -276,6 +386,10 @@ export class UsersService {
         email: normalizedEmail,
         phoneNumber: params.phoneNumber ?? null,
         fullName: params.fullName,
+        profileImageUrl: null,
+        profileImageSource: 'none',
+        role: 'customer', // self-registration = customer only
+        branchId: null,
         accountStatus: 'active',
         emailVerifiedAt: null,
         phoneVerifiedAt: null,
@@ -299,11 +413,8 @@ export class UsersService {
   }
 
   /**
-   * Find-or-create a user from an OAuth provider's profile.
-   * Handles three cases:
-   *   1. User already has this provider linked → just update tokens, return user
-   *   2. Email matches an existing user → link the new provider to that user
-   *   3. Brand new user → create UserEntity + AuthAccountEntity together
+   * OAuth signup/login — ALWAYS creates role='customer' if new user.
+   * Existing users keep their current role.
    */
   async findOrCreateFromOAuth(
     profile: OAuthProfileData,
@@ -320,7 +431,6 @@ export class UsersService {
         },
       });
       if (existingAuth !== null) {
-        // Refresh stored tokens
         existingAuth.accessToken = profile.accessToken;
         existingAuth.refreshToken = profile.refreshToken;
         existingAuth.tokenExpiresAt = profile.tokenExpiresAt;
@@ -331,14 +441,23 @@ export class UsersService {
           where: { id: existingAuth.userId },
         });
         if (user === null) {
-          throw new NotFoundException(
-            'Linked user not found — data integrity issue',
-          );
+          throw new NotFoundException('Linked user not found');
         }
+
+        if (
+          profile.profileImageUrl !== null &&
+          (user.profileImageSource === 'oauth' ||
+            user.profileImageSource === 'none')
+        ) {
+          user.profileImageUrl = profile.profileImageUrl;
+          user.profileImageSource = 'oauth';
+          await userRepo.save(user);
+        }
+
         return { user, isNewUser: false };
       }
 
-      // Case 2: email matches an existing user → link this provider
+      // Case 2: email matches an existing user → link provider (role unchanged)
       if (profile.email) {
         const existingUser = await userRepo.findOne({
           where: { email: profile.email.toLowerCase() },
@@ -355,17 +474,24 @@ export class UsersService {
           });
           await authRepo.save(newAuth);
 
-          // Mark email verified since OAuth provider confirmed it
           if (existingUser.emailVerifiedAt === null) {
             existingUser.emailVerifiedAt = new Date();
-            await userRepo.save(existingUser);
           }
 
+          if (
+            profile.profileImageUrl !== null &&
+            existingUser.profileImageSource === 'none'
+          ) {
+            existingUser.profileImageUrl = profile.profileImageUrl;
+            existingUser.profileImageSource = 'oauth';
+          }
+
+          await userRepo.save(existingUser);
           return { user: existingUser, isNewUser: false };
         }
       }
 
-      // Case 3: brand new user
+      // Case 3: brand new user → always role='customer'
       const newUser = userRepo.create({
         email: profile.email ? profile.email.toLowerCase() : null,
         emailVerifiedAt: profile.email ? new Date() : null,
@@ -373,6 +499,9 @@ export class UsersService {
         phoneVerifiedAt: null,
         fullName: profile.fullName,
         profileImageUrl: profile.profileImageUrl,
+        profileImageSource: profile.profileImageUrl ? 'oauth' : 'none',
+        role: 'customer',
+        branchId: null,
         accountStatus: 'active',
         tokenVersion: 0,
       });
@@ -395,10 +524,6 @@ export class UsersService {
     });
   }
 
-  /**
-   * Find a user's email auth account WITH its passwordHash.
-   * Used by AuthService.validateEmailPassword().
-   */
   async findEmailAuthAccount(
     email: string,
   ): Promise<{ user: UserEntity; authAccount: AuthAccountEntity } | null> {
@@ -419,10 +544,6 @@ export class UsersService {
     return { user: authAccount.user, authAccount };
   }
 
-  /**
-   * Link a new password (email provider) to an existing user.
-   * Used by users who signed up with OAuth and want to add email/password login.
-   */
   async addEmailPassword(userId: string, password: string): Promise<void> {
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (user === null) {
@@ -430,7 +551,7 @@ export class UsersService {
     }
     if (user.email === null) {
       throw new BadRequestException(
-        'Cannot add password: user has no email address. Add an email first.',
+        'Cannot add password: user has no email address',
       );
     }
 
@@ -438,9 +559,7 @@ export class UsersService {
       where: { userId, provider: 'email' },
     });
     if (existing !== null) {
-      throw new ConflictException(
-        'Email/password login is already set up. Use change-password to update it.',
-      );
+      throw new ConflictException('Email/password login is already set up');
     }
 
     const passwordHash = await hashPassword(password);
@@ -453,10 +572,6 @@ export class UsersService {
     await this.authAccountRepository.save(authAccount);
   }
 
-  /**
-   * Change password for a user's email auth account.
-   * Also bumps tokenVersion to invalidate existing JWTs.
-   */
   async changePassword(userId: string, newPassword: string): Promise<void> {
     return this.dataSource.transaction(async (manager) => {
       const authRepo = manager.getRepository(AuthAccountEntity);
@@ -479,19 +594,13 @@ export class UsersService {
     });
   }
 
-  /**
-   * Unlink an OAuth provider from a user.
-   * Rejected if it's their ONLY auth method (would lock them out).
-   */
   async unlinkProvider(userId: string, provider: AuthProvider): Promise<void> {
     const allAccounts = await this.authAccountRepository.find({
       where: { userId },
     });
 
     if (allAccounts.length <= 1) {
-      throw new BadRequestException(
-        'Cannot remove your only login method. Link another method first.',
-      );
+      throw new BadRequestException('Cannot remove your only login method');
     }
 
     const account = allAccounts.find((a) => a.provider === provider);
@@ -502,14 +611,11 @@ export class UsersService {
     await this.authAccountRepository.remove(account);
   }
 
-  /**
-   * For JWT validation: load user by ID, ensure still active, returns null otherwise.
-   */
   async findActiveUserById(id: string): Promise<UserEntity | null> {
-    const user = await this.userRepository.findOne({
+    return this.userRepository.findOne({
       where: { id, accountStatus: 'active' },
+      relations: ['branch'],
     });
-    return user;
   }
 
   async getTokenVersion(id: string): Promise<number | null> {
@@ -529,9 +635,35 @@ export class UsersService {
   // ==========================================================================
 
   /**
-   * Decide if the user has everything needed to place an order.
-   * Current rule: phone number + full name are required. Email is optional.
+   * Enforce the rules:
+   *   cashier/manager → MUST have branchId
+   *   customer/admin/super_admin → MUST NOT have branchId
    */
+  private async validateRoleBranchCombination(
+    role: UserRole,
+    branchId: string | null,
+  ): Promise<void> {
+    if (BRANCH_REQUIRED_ROLES.includes(role)) {
+      if (!branchId) {
+        throw new BadRequestException(
+          `Role "${role}" requires a branchId. Assign the user to a branch.`,
+        );
+      }
+      const branch = await this.branchRepository.findOne({
+        where: { id: branchId },
+      });
+      if (branch === null) {
+        throw new BadRequestException(`Branch with ID ${branchId} not found`);
+      }
+    }
+
+    if (BRANCH_FORBIDDEN_ROLES.includes(role) && branchId !== null) {
+      throw new BadRequestException(
+        `Role "${role}" cannot be assigned to a branch. Set branchId to null.`,
+      );
+    }
+  }
+
   private computeProfileComplete(user: UserEntity): boolean {
     return (
       user.fullName !== null &&
@@ -551,16 +683,42 @@ export class UsersService {
     if (!user.phoneNumber || user.phoneNumber.trim().length === 0) {
       missing.push('phoneNumber');
     }
-    // Email is not required but useful for receipts — only include if we care
-    // Leaving it out by default since our rule says phone is enough.
     return missing;
+  }
+
+  private async deleteAvatarFile(imageUrl: string): Promise<void> {
+    try {
+      if (!imageUrl || !imageUrl.startsWith('/upload/avatars/')) {
+        return;
+      }
+      const filename = imageUrl.replace('/upload/avatars/', '');
+      await this.deleteFileByFilename(filename);
+    } catch (error) {
+      console.error('Error deleting avatar file:', error);
+    }
+  }
+
+  private async deleteFileByFilename(filename: string): Promise<void> {
+    try {
+      const filePath = path.join(AVATAR_UPLOAD_DIR, filename);
+      await fs.unlink(filePath);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'ENOENT'
+      ) {
+        return;
+      }
+      console.error('Error deleting file:', error);
+    }
   }
 
   private toResponse(entity: UserEntity): UserResponse {
     const providers: AuthProvider[] =
       entity.authAccounts?.map((a) => a.provider) ?? [];
 
-    return {
+    const response: UserResponse = {
       id: entity.id,
       email: entity.email,
       emailVerifiedAt: entity.emailVerifiedAt,
@@ -568,6 +726,9 @@ export class UsersService {
       phoneVerifiedAt: entity.phoneVerifiedAt,
       fullName: entity.fullName,
       profileImageUrl: entity.profileImageUrl,
+      profileImageSource: entity.profileImageSource,
+      role: entity.role,
+      branchId: entity.branchId,
       accountStatus: entity.accountStatus,
       isProfileComplete: entity.isProfileComplete,
       missingFields: this.computeMissingFields(entity),
@@ -575,19 +736,26 @@ export class UsersService {
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     };
+
+    if (entity.branch) {
+      response.branch = {
+        id: entity.branch.id,
+        branchCode: entity.branch.branchCode,
+        branchNameEn: entity.branch.branchNameEn,
+        branchNameKm: entity.branch.branchNameKm,
+      };
+    }
+
+    return response;
   }
 
-  /**
-   * Refetches the user with authAccounts relation loaded, then converts.
-   * Used after create/update where authAccounts may not be hydrated.
-   */
-  private async toResponseWithProviders(
+  private async toResponseWithRelations(
     entity: UserEntity,
   ): Promise<UserResponse> {
-    const withAccounts = await this.userRepository.findOne({
+    const withRelations = await this.userRepository.findOne({
       where: { id: entity.id },
-      relations: ['authAccounts'],
+      relations: ['authAccounts', 'branch'],
     });
-    return this.toResponse(withAccounts ?? entity);
+    return this.toResponse(withRelations ?? entity);
   }
 }

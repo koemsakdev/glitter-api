@@ -1,6 +1,24 @@
 import { ApiProperty } from '@nestjs/swagger';
-import type { AccountStatus } from '../entities/user.entity';
+import type {
+  AccountStatus,
+  ProfileImageSource,
+  UserRole,
+} from '../entities/user.entity';
 import { AuthProvider } from '../entities/auth-account.entity';
+
+export class UserBranchSummaryDto {
+  @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
+  id!: string;
+
+  @ApiProperty({ example: 'PP-TTP-001' })
+  branchCode!: string;
+
+  @ApiProperty({ example: 'Tuol Tompoung Branch' })
+  branchNameEn!: string;
+
+  @ApiProperty({ example: 'សាខាទួលទំពូង' })
+  branchNameKm!: string;
+}
 
 export class UserResponseDto {
   @ApiProperty({ example: '550e8400-e29b-41d4-a716-446655440000' })
@@ -21,21 +39,38 @@ export class UserResponseDto {
   @ApiProperty({ example: 'Koemsak Sovann' })
   fullName!: string;
 
-  @ApiProperty({ nullable: true, example: null })
+  @ApiProperty({
+    nullable: true,
+    example: 'https://lh3.googleusercontent.com/a/abc...',
+  })
   profileImageUrl!: string | null;
+
+  @ApiProperty({
+    enum: ['none', 'oauth', 'uploaded'],
+    example: 'oauth',
+  })
+  profileImageSource!: ProfileImageSource;
+
+  @ApiProperty({
+    enum: ['customer', 'cashier', 'manager', 'admin', 'super_admin'],
+    example: 'customer',
+  })
+  role!: UserRole;
+
+  @ApiProperty({ nullable: true, example: null })
+  branchId!: string | null;
+
+  @ApiProperty({ type: UserBranchSummaryDto, required: false })
+  branch?: UserBranchSummaryDto;
 
   @ApiProperty({ enum: ['active', 'suspended', 'deleted'], example: 'active' })
   accountStatus!: AccountStatus;
 
-  @ApiProperty({
-    example: false,
-    description: 'True when the user has all fields required to place an order',
-  })
+  @ApiProperty({ example: false })
   isProfileComplete!: boolean;
 
   @ApiProperty({
     example: ['phoneNumber'],
-    description: 'Which required fields are still missing',
     isArray: true,
     enum: ['phoneNumber', 'email', 'fullName'],
   })
@@ -45,7 +80,6 @@ export class UserResponseDto {
     enum: ['email', 'google', 'facebook', 'apple', 'telegram'],
     isArray: true,
     example: ['google', 'email'],
-    description: 'All login methods linked to this account',
   })
   linkedProviders!: AuthProvider[];
 

@@ -4,16 +4,15 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
 } from 'class-validator';
-import type { AccountStatus } from '../entities/user.entity';
+import type { AccountStatus, UserRole } from '../entities/user.entity';
 
 /**
- * Used both by:
- *   - Users updating their own profile (PATCH /api/users/me)
- *   - Admins updating user records (PATCH /api/users/:id)
- *   - The "complete your profile" modal filling in missing phone/email
+ * Update DTO for profile fields.
+ * role and branchId are admin-only — enforce this in the controller/guard layer.
  */
 export class UpdateUserDto {
   @ApiPropertyOptional()
@@ -34,16 +33,21 @@ export class UpdateUserDto {
   @MaxLength(255)
   fullName?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({
+    enum: ['customer', 'cashier', 'manager', 'admin', 'super_admin'],
+    description: 'Admin-only. Changing role may require branchId adjustment.',
+  })
   @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  profileImageUrl?: string;
+  @IsEnum(['customer', 'cashier', 'manager', 'admin', 'super_admin'])
+  role?: UserRole;
 
-  /**
-   * Admin-only. User-facing endpoints ignore this field.
-   * Enforcement lives in the controller layer.
-   */
+  @ApiPropertyOptional({
+    description: 'Admin-only. Set to null to unassign from branch.',
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
+
   @ApiPropertyOptional({ enum: ['active', 'suspended', 'deleted'] })
   @IsOptional()
   @IsEnum(['active', 'suspended', 'deleted'])

@@ -16,6 +16,8 @@ import { ProductVariantsModule } from './product-variants/product-variant.module
 import { InventoryBranchModule } from './inventory-branch/inventory-branch.module';
 import { ProductBadgesModule } from './product-badges/product-badge.module';
 import { UsersModule } from './users/user.module';
+import { AuthModule } from './auth/auth.module';
+import { AddressesModule } from './addresses/address.module';
 
 @Module({
   imports: [
@@ -51,6 +53,8 @@ import { UsersModule } from './users/user.module';
     InventoryBranchModule,
     ProductBadgesModule,
     UsersModule,
+    AuthModule,
+    AddressesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

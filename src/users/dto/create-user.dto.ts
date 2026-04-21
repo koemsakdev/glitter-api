@@ -5,20 +5,27 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
 } from 'class-validator';
-import type { AccountStatus } from '../entities/user.entity';
+import type { AccountStatus, UserRole } from '../entities/user.entity';
 
 /**
- * Admin endpoint for creating users. For self-signup, customers use
- * POST /api/auth/register (email+password) or the OAuth flows.
- * Both the create endpoint and OAuth callbacks ultimately go through UsersService.createForAuth().
+ * Admin endpoint for creating users.
+ *
+ * Roles:
+ *   - 'customer' (default)     — regular shopper. branchId should be null.
+ *   - 'cashier' or 'manager'   — staff member. branchId is REQUIRED.
+ *   - 'admin' or 'super_admin' — system admin. branchId should be null.
+ *
+ * Self-registration via POST /api/auth/register always creates role='customer'.
+ * Only admins/super_admins can use this endpoint to create elevated roles.
  */
 export class CreateUserDto {
   @ApiPropertyOptional({
     example: 'customer@example.com',
-    description: 'Email (optional — some social sign-ups may not provide one)',
+    description: 'Optional — some social sign-ups may not provide one',
   })
   @IsOptional()
   @IsEmail()
@@ -27,8 +34,7 @@ export class CreateUserDto {
 
   @ApiPropertyOptional({
     example: '+85512345678',
-    description:
-      'Cambodian phone number (optional at creation, required before ordering)',
+    description: 'Optional at creation, required before ordering',
   })
   @IsOptional()
   @IsString()
@@ -45,12 +51,23 @@ export class CreateUserDto {
   fullName!: string;
 
   @ApiPropertyOptional({
-    example: 'https://example.com/avatar.jpg',
+    enum: ['customer', 'cashier', 'manager', 'admin', 'super_admin'],
+    default: 'customer',
+    description:
+      'User role. Defaults to "customer". Setting staff/admin roles requires admin-level permissions.',
   })
   @IsOptional()
-  @IsString()
-  @MaxLength(500)
-  profileImageUrl?: string;
+  @IsEnum(['customer', 'cashier', 'manager', 'admin', 'super_admin'])
+  role?: UserRole;
+
+  @ApiPropertyOptional({
+    description:
+      'Branch UUID. Required when role is "cashier" or "manager". Must be null for customers/admins.',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @IsOptional()
+  @IsUUID()
+  branchId?: string;
 
   @ApiPropertyOptional({
     enum: ['active', 'suspended', 'deleted'],

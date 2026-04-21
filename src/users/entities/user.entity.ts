@@ -3,23 +3,42 @@ import {
   CreateDateColumn,
   Entity,
   Index,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { AuthAccountEntity } from './auth-account.entity';
+import { BranchEntity } from '../../branch/entities/branch.entity';
 
 export type AccountStatus = 'active' | 'suspended' | 'deleted';
+
+export type ProfileImageSource = 'none' | 'oauth' | 'uploaded';
+
+/**
+ * User roles — determines what the user can access in the admin dashboard.
+ *
+ *   customer     — shops at the store (default). No admin dashboard access.
+ *   cashier      — can process sales + check stock at their assigned branch.
+ *   manager      — full control of one branch (staff, inventory, products visible at their branch).
+ *   admin        — manage everything except creating other admins or super admins.
+ *   super_admin  — full system access. Can create/manage other admins.
+ *
+ * Roles are ordered by power level; higher roles inherit the permissions below them.
+ */
+export type UserRole =
+  | 'customer'
+  | 'cashier'
+  | 'manager'
+  | 'admin'
+  | 'super_admin';
 
 @Entity('users')
 export class UserEntity {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  /**
-   * Primary email. Nullable because some OAuth providers (Facebook, phone-only
-   * logins) may not return an email. Unique when set.
-   */
   @Index({ unique: true, where: '"email" IS NOT NULL' })
   @Column({ type: 'varchar', length: 255, nullable: true })
   email!: string | null;
@@ -31,10 +50,6 @@ export class UserEntity {
   })
   emailVerifiedAt!: Date | null;
 
-  /**
-   * Phone number is nullable at signup (social sign-in doesn't provide it).
-   * Required before the user can place an order — enforced in the Orders API, not here.
-   */
   @Index({ unique: true, where: '"phone_number" IS NOT NULL' })
   @Column({
     type: 'varchar',
@@ -64,23 +79,47 @@ export class UserEntity {
 
   @Column({
     type: 'enum',
+    enum: ['none', 'oauth', 'uploaded'],
+    default: 'none',
+    name: 'profile_image_source',
+  })
+  profileImageSource!: ProfileImageSource;
+
+  /**
+   * The user's role. Defaults to 'customer'.
+   * Only super_admin and admin can set roles other than 'customer' during user creation.
+   * Self-registration always creates users with role='customer'.
+   */
+  @Column({
+    type: 'enum',
+    enum: ['customer', 'cashier', 'manager', 'admin', 'super_admin'],
+    default: 'customer',
+  })
+  role!: UserRole;
+
+  /**
+   * Which branch this user is assigned to (for staff roles).
+   * NULL for customers, admins, and super_admins (who aren't tied to one branch).
+   * REQUIRED for cashiers and managers.
+   */
+  @Column({ type: 'uuid', nullable: true, name: 'branch_id' })
+  branchId!: string | null;
+
+  @ManyToOne(() => BranchEntity, { onDelete: 'SET NULL', eager: false })
+  @JoinColumn({ name: 'branch_id' })
+  branch?: BranchEntity;
+
+  @Column({
+    type: 'enum',
     enum: ['active', 'suspended', 'deleted'],
     default: 'active',
     name: 'account_status',
   })
   accountStatus!: AccountStatus;
 
-  /**
-   * True once the user has provided all info required for ordering
-   * (name + phone + email). Auto-computed in service on each update.
-   * Frontend checks this to decide whether to show "Complete your profile" prompt.
-   */
   @Column({ type: 'boolean', default: false, name: 'is_profile_complete' })
   isProfileComplete!: boolean;
 
-  /**
-   * Bumped on password change / forced logout to invalidate all existing JWTs.
-   */
   @Column({ type: 'int', default: 0, name: 'token_version' })
   tokenVersion!: number;
 

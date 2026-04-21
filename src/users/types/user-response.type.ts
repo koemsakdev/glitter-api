@@ -1,13 +1,9 @@
-import { AccountStatus } from '../entities/user.entity';
+import {
+  AccountStatus,
+  ProfileImageSource,
+  UserRole,
+} from '../entities/user.entity';
 import { AuthProvider } from '../entities/auth-account.entity';
-
-export interface LinkedAuthAccount {
-  id: string;
-  provider: AuthProvider;
-  providerAccountId: string;
-  createdAt: Date;
-  // Note: tokens and passwordHash are never in responses
-}
 
 export interface UserResponse {
   id: string;
@@ -17,11 +13,18 @@ export interface UserResponse {
   phoneVerifiedAt: Date | null;
   fullName: string;
   profileImageUrl: string | null;
+  profileImageSource: ProfileImageSource;
+  role: UserRole;
+  branchId: string | null;
+  branch?: {
+    id: string;
+    branchCode: string;
+    branchNameEn: string;
+    branchNameKm: string;
+  };
   accountStatus: AccountStatus;
   isProfileComplete: boolean;
-  // What's missing for profile completion — helps frontend show the right prompt
   missingFields: Array<'phoneNumber' | 'email' | 'fullName'>;
-  // Which providers this user can log in with
   linkedProviders: AuthProvider[];
   createdAt: Date;
   updatedAt: Date;
