@@ -35,8 +35,14 @@ import {
   ProductVariantListResponse,
   ProductVariantOptionsResponse,
 } from './types/product-variant-response.type';
+import { UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiTags('Product Variants')
+@ApiBearerAuth()
 @Controller('api/product-variants')
 export class ProductVariantsController {
   constructor(private readonly variantsService: ProductVariantsService) {}
@@ -53,6 +59,8 @@ export class ProductVariantsController {
     status: 201,
     type: ProductVariantDetailResponseDto,
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   async create(
     @Body() dto: CreateProductVariantDto,
   ): Promise<ProductVariantDetailResponse> {
@@ -71,12 +79,16 @@ export class ProductVariantsController {
     status: 201,
     type: ProductVariantBulkResponseDto,
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   async createBulk(
     @Body() dto: BulkCreateVariantsDto,
   ): Promise<ProductVariantBulkResponse> {
     return this.variantsService.createBulk(dto);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @Get()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get all variants (admin)' })
@@ -92,6 +104,7 @@ export class ProductVariantsController {
     description:
       'Returns all variants for a product. Includes effectivePrice (override or parent product price).',
   })
+  @Public()
   @ApiParam({ name: 'productId', type: String })
   @ApiResponse({ status: 200, type: ProductVariantListResponseDto })
   async findByProduct(
@@ -117,12 +130,15 @@ export class ProductVariantsController {
     description: 'Structured variant options',
     type: ProductVariantOptionsResponseDto,
   })
+  @Public()
   async findOptions(
     @Param('productId') productId: string,
   ): Promise<ProductVariantOptionsResponse> {
     return this.variantsService.findOptions(productId);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @Get('sku/:variantSku')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get variant by SKU' })
@@ -134,6 +150,7 @@ export class ProductVariantsController {
     return this.variantsService.findBySku(variantSku);
   }
 
+  @Public()
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get variant by ID' })
@@ -145,6 +162,8 @@ export class ProductVariantsController {
     return this.variantsService.findOne(id);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update a variant' })
@@ -165,6 +184,8 @@ export class ProductVariantsController {
     description:
       'Positive delta adds, negative subtracts. Prevents negative stock.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @ApiParam({ name: 'id', type: String })
   @ApiQuery({ name: 'delta', type: Number, required: true })
   @ApiResponse({ status: 200, type: ProductVariantDetailResponseDto })
@@ -186,6 +207,8 @@ export class ProductVariantsController {
     description:
       'Deletes a variant. Rejected if it is the only default variant of a single-variant product. If this deletes the last real variant, the default is auto-recreated.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 204 })
   async delete(@Param('id') id: string): Promise<void> {

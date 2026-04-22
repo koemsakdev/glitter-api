@@ -36,8 +36,14 @@ import {
   InventoryBranchResponse,
   ProductAvailabilityResponse,
 } from './types/inventory-branch-response.type';
+import { UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiTags('Inventory Branch')
+@ApiBearerAuth()
 @Controller('api/inventory-branch')
 export class InventoryBranchController {
   constructor(private readonly service: InventoryBranchService) {}
@@ -54,6 +60,8 @@ export class InventoryBranchController {
     status: 201,
     type: InventoryBranchDetailResponseDto,
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   async create(
     @Body() dto: CreateInventoryBranchDto,
   ): Promise<InventoryBranchDetailResponse> {
@@ -65,6 +73,8 @@ export class InventoryBranchController {
   @ApiOperation({
     summary: 'Get all inventory records (paginated, filterable)',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'branchId', required: false, type: String })
@@ -96,6 +106,7 @@ export class InventoryBranchController {
     description:
       'Returns where a product is stocked and in which size/color/quantity at each branch. This is the endpoint the storefront uses for "Check store availability" and the admin uses to see stock distribution.',
   })
+  @Public()
   @ApiParam({ name: 'productId', type: String })
   @ApiResponse({ status: 200, type: ProductAvailabilityResponseDto })
   async getProductAvailability(
@@ -115,6 +126,8 @@ export class InventoryBranchController {
     description:
       'Returns every variant stocked at this branch, ordered by product name.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @ApiParam({ name: 'branchId', type: String })
   @ApiResponse({ status: 200, type: InventoryBranchListResponseDto })
   async findByBranch(
@@ -134,6 +147,8 @@ export class InventoryBranchController {
     description:
       'Totals: how many variants stocked, total units available/reserved/damaged.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @ApiParam({ name: 'branchId', type: String })
   @ApiResponse({ status: 200, type: BranchInventorySummaryResponseDto })
   async getBranchSummary(
@@ -151,6 +166,8 @@ export class InventoryBranchController {
   @ApiOperation({
     summary: 'Get inventory for a variant across all branches',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @ApiParam({ name: 'variantId', type: String })
   @ApiResponse({ status: 200, type: InventoryBranchListResponseDto })
   async findByVariant(
@@ -159,6 +176,8 @@ export class InventoryBranchController {
     return this.service.findByVariant(variantId);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get an inventory record by ID' })
@@ -181,6 +200,8 @@ export class InventoryBranchController {
     description:
       'Moves units from available → reserved. Used when a customer starts checkout. Transactional with row locking to prevent race conditions.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @ApiBody({ type: ReserveStockDto })
   @ApiResponse({ status: 200, type: InventoryBranchDetailResponseDto })
   async reserve(
@@ -200,6 +221,8 @@ export class InventoryBranchController {
     description:
       'Moves units from reserved → available. Used when customer cancels or checkout times out.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @ApiBody({ type: ReserveStockDto })
   @ApiResponse({ status: 200, type: InventoryBranchDetailResponseDto })
   async releaseReservation(
@@ -219,6 +242,8 @@ export class InventoryBranchController {
     description:
       'Removes units from reserved permanently (sale is finalized). Decreases global variant stock to match.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager', 'cashier')
   @ApiBody({ type: ReserveStockDto })
   @ApiResponse({ status: 200, type: InventoryBranchDetailResponseDto })
   async commitReservation(
@@ -243,6 +268,8 @@ export class InventoryBranchController {
     status: 200,
     description: 'Source and destination records after transfer',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   async transfer(@Body() dto: TransferStockDto): Promise<{
     from: InventoryBranchResponse;
     to: InventoryBranchResponse;
@@ -257,6 +284,8 @@ export class InventoryBranchController {
     description:
       'Direct update of available/reserved/damaged quantities. For normal sales flow use reserve → commit instead. For inter-branch moves use /transfer.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @ApiParam({ name: 'id', type: String })
   @ApiBody({ type: UpdateInventoryBranchDto })
   @ApiResponse({ status: 200, type: InventoryBranchDetailResponseDto })
@@ -274,6 +303,8 @@ export class InventoryBranchController {
     description:
       'Removes the stock record. Global variant stock is recomputed.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 204 })
   async delete(@Param('id') id: string): Promise<void> {

@@ -60,6 +60,7 @@ import { UsersModule } from './users/user.module';
       serveRoot: '/upload',
     }),
     // Business modules
+    AuthModule,
     AppSettingsModule,
     BranchModule,
     StaffModule,
@@ -71,7 +72,6 @@ import { UsersModule } from './users/user.module';
     ProductBadgesModule,
     InventoryBranchModule,
     UsersModule,
-    AuthModule,
     AddressesModule,
   ],
   providers: [

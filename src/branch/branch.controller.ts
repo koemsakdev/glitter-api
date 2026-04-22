@@ -17,11 +17,19 @@ import {
   BranchListResponse,
   BranchResponse,
 } from './types/branch-response.type';
+import { UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
+@ApiBearerAuth()
 @Controller('api/branches')
 export class BranchesController {
   constructor(private readonly branchesService: BranchesService) {}
 
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
   /**
    * Create a new branch
    * POST /api/branches
@@ -32,6 +40,7 @@ export class BranchesController {
     return this.branchesService.create(dto);
   }
 
+  @Public()
   /**
    * Get all branches with pagination
    * GET /api/branches?page=1&limit=10
@@ -47,6 +56,7 @@ export class BranchesController {
     return this.branchesService.findAll(pageNum, limitNum);
   }
 
+  @Public()
   /**
    * Get all active branches
    * GET /api/branches/status/active
@@ -57,6 +67,7 @@ export class BranchesController {
     return this.branchesService.findActive();
   }
 
+  @Public()
   /**
    * Get a specific branch by ID
    * GET /api/branches/:id
@@ -67,6 +78,7 @@ export class BranchesController {
     return this.branchesService.findOne(id);
   }
 
+  @Public()
   /**
    * Get a specific branch by code
    * GET /api/branches/code/:code
@@ -77,6 +89,8 @@ export class BranchesController {
     return this.branchesService.findByCode(code);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
   /**
    * Update a branch
    * PATCH /api/branches/:id
@@ -90,6 +104,8 @@ export class BranchesController {
     return this.branchesService.update(id, dto);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('super_admin')
   /**
    * Delete a branch
    * DELETE /api/branches/:id

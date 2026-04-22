@@ -27,8 +27,14 @@ import {
   ProductBadgeDetailResponse,
   ProductBadgeListResponse,
 } from './types/product-badge-response.type';
+import { UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiTags('Product Badges')
+@ApiBearerAuth()
 @Controller('api/product-badges')
 export class ProductBadgesController {
   constructor(private readonly badgesService: ProductBadgesService) {}
@@ -64,6 +70,8 @@ export class ProductBadgesController {
       },
     },
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @ApiResponse({ status: 201, type: ProductBadgeDetailResponseDto })
   async create(
     @Body() dto: CreateProductBadgeDto,
@@ -78,6 +86,8 @@ export class ProductBadgesController {
     description:
       'Returns ALL badges for a product, including expired and scheduled future ones. Use /active for storefront display.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @ApiParam({ name: 'productId', type: String })
   @ApiResponse({ status: 200, type: ProductBadgeListResponseDto })
   async findByProduct(
@@ -93,6 +103,7 @@ export class ProductBadgesController {
     description:
       'Returns only badges whose start/end date window includes the current time. Sorted by display priority.',
   })
+  @Public()
   @ApiParam({ name: 'productId', type: String })
   @ApiResponse({ status: 200, type: ProductBadgeListResponseDto })
   async findActiveByProduct(
@@ -117,10 +128,13 @@ export class ProductBadgesController {
     description: 'Count of removed badges',
     schema: { example: { removed: 5 } },
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
   async cleanupExpired(): Promise<{ removed: number }> {
     return this.badgesService.cleanupExpired();
   }
 
+  @Public()
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get a badge by ID' })
@@ -130,6 +144,8 @@ export class ProductBadgesController {
     return this.badgesService.findOne(id);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update a badge' })
@@ -143,6 +159,8 @@ export class ProductBadgesController {
     return this.badgesService.update(id, dto);
   }
 
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a badge' })

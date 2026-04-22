@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-argument */
 import {
   Body,
   Controller,
@@ -36,6 +37,11 @@ import {
   BrandListResponse,
   BrandDetailResponse,
 } from './types/brand-response.type';
+import { UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 // Define upload destination
 const BRAND_UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'brands');
@@ -69,6 +75,7 @@ const fileFilter = (
 };
 
 @ApiTags('Brands')
+@ApiBearerAuth()
 @Controller('api/brands')
 export class BrandsController {
   constructor(private readonly brandsService: BrandsService) {}
@@ -137,6 +144,8 @@ export class BrandsController {
       'Brand created successfully with logo stored in /uploads/brands/',
     type: BrandDetailResponseDto,
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
   @ApiResponse({ status: 400, description: 'Invalid input data or file' })
   @ApiResponse({ status: 409, description: 'Brand slug already exists' })
   async create(
@@ -182,6 +191,7 @@ export class BrandsController {
     description: 'Brands retrieved successfully',
     type: BrandListResponseDto,
   })
+  @Public()
   async findAll(
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
@@ -206,6 +216,7 @@ export class BrandsController {
     description: 'Active brands retrieved successfully',
     type: BrandListResponseDto,
   })
+  @Public()
   async findActive(): Promise<BrandListResponse> {
     return this.brandsService.findActive();
   }
@@ -231,6 +242,7 @@ export class BrandsController {
     description: 'Brand retrieved successfully',
     type: BrandDetailResponseDto,
   })
+  @Public()
   @ApiResponse({ status: 404, description: 'Brand not found' })
   async findOne(@Param('id') id: string): Promise<BrandDetailResponse> {
     return this.brandsService.findOne(id);
@@ -257,6 +269,7 @@ export class BrandsController {
     description: 'Brand retrieved successfully',
     type: BrandDetailResponseDto,
   })
+  @Public()
   @ApiResponse({ status: 404, description: 'Brand not found' })
   async findBySlug(@Param('slug') slug: string): Promise<BrandDetailResponse> {
     return this.brandsService.findBySlug(slug);
@@ -328,6 +341,8 @@ export class BrandsController {
     description: 'Brand updated successfully',
     type: BrandDetailResponseDto,
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
   @ApiResponse({ status: 400, description: 'Invalid input data or file' })
   @ApiResponse({ status: 404, description: 'Brand not found' })
   @ApiResponse({ status: 409, description: 'Brand slug already exists' })
@@ -362,6 +377,8 @@ export class BrandsController {
     description: 'Brand UUID',
     example: '550e8400-e29b-41d4-a716-446655440000',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
   @ApiResponse({ status: 204, description: 'Brand deleted successfully' })
   @ApiResponse({ status: 404, description: 'Brand not found' })
   async delete(@Param('id') id: string): Promise<void> {

@@ -29,8 +29,14 @@ import {
   ProductDetailResponse,
   ProductListResponse,
 } from './types/product-response.type';
+import { UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
+import { Public } from '../auth/decorators/public.decorator';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiTags('Products')
+@ApiBearerAuth()
 @Controller('api/products')
 export class ProductsController {
   constructor(private readonly productsService: ProductsService) {}
@@ -48,6 +54,8 @@ export class ProductsController {
     description: 'Product created successfully',
     type: ProductDetailResponseDto,
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   async create(@Body() dto: CreateProductDto): Promise<ProductDetailResponse> {
     return this.productsService.create(dto);
   }
@@ -64,6 +72,7 @@ export class ProductsController {
     description: 'Products retrieved successfully',
     type: ProductListResponseDto,
   })
+  @Public()
   async findAll(@Query() query: ProductQueryDto): Promise<ProductListResponse> {
     return this.productsService.findAll(query);
   }
@@ -87,10 +96,13 @@ export class ProductsController {
       example: { updated: 3 },
     },
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
   async syncAllStock(): Promise<{ updated: number }> {
     return this.productsService.syncAllStock();
   }
 
+  @Public()
   @Get('slug/:slug')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get product by slug' })
@@ -102,6 +114,7 @@ export class ProductsController {
     return this.productsService.findBySlug(slug);
   }
 
+  @Public()
   @Get('sku/:sku')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get product by SKU' })
@@ -111,6 +124,7 @@ export class ProductsController {
     return this.productsService.findBySku(sku);
   }
 
+  @Public()
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Get product by ID' })
@@ -127,6 +141,8 @@ export class ProductsController {
     description:
       'Partial update. Note: totalStock is not editable here — it is derived from variants. Use variant endpoints to change stock.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: ProductDetailResponseDto })
   async update(
@@ -147,6 +163,8 @@ export class ProductsController {
     description:
       'Recomputes product.totalStock as SUM(variant.quantityInStock). Useful if totalStock has drifted due to manual DB changes or legacy data.',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: ProductDetailResponseDto })
   @ApiResponse({ status: 404, description: 'Product not found' })
@@ -160,6 +178,8 @@ export class ProductsController {
     summary: 'Archive a product',
     description: 'Sets status to archived without deleting',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin', 'manager')
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 200, type: ProductDetailResponseDto })
   async archive(@Param('id') id: string): Promise<ProductDetailResponse> {
@@ -172,6 +192,8 @@ export class ProductsController {
     summary: 'Delete a product',
     description: 'Permanently removes the product and cascades to its variants',
   })
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'super_admin')
   @ApiParam({ name: 'id', type: String })
   @ApiResponse({ status: 204, description: 'Product deleted successfully' })
   async delete(@Param('id') id: string): Promise<void> {
