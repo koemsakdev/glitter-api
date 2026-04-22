@@ -42,6 +42,7 @@ import { ProductVariantsModule } from './product-variants/product-variant.module
 import { ProductsModule } from './products/product.module';
 import { StaffModule } from './staff/staff.module';
 import { UsersModule } from './users/user.module';
+import { SeedModule } from './seed/seed.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { UsersModule } from './users/user.module';
     InventoryBranchModule,
     UsersModule,
     AddressesModule,
+    SeedModule,
   ],
   providers: [
     {
