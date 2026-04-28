@@ -43,7 +43,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiTags('Product Variants')
 @ApiBearerAuth()
-@Controller('api/product-variants')
+@Controller('product-variants')
 export class ProductVariantsController {
   constructor(private readonly variantsService: ProductVariantsService) {}
 

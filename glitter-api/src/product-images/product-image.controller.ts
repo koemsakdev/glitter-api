@@ -82,7 +82,7 @@ const fileFilter = (
 
 @ApiTags('Product Images')
 @ApiBearerAuth()
-@Controller('api/product-images')
+@Controller('product-images')
 export class ProductImagesController {
   constructor(private readonly productImagesService: ProductImagesService) {}
 

@@ -10,7 +10,6 @@ export default function LoginPage() {
   const user = useAuthStore((s) => s.user);
   const isHydrated = useAuthStore((s) => s.isHydrated);
 
-  // If already logged in, redirect to dashboard
   useEffect(() => {
     if (isHydrated && user && user.role !== 'customer') {
       router.replace('/dashboard');

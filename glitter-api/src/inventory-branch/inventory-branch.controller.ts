@@ -44,7 +44,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiTags('Inventory Branch')
 @ApiBearerAuth()
-@Controller('api/inventory-branch')
+@Controller('inventory-branch')
 export class InventoryBranchController {
   constructor(private readonly service: InventoryBranchService) {}
 
@@ -97,7 +97,7 @@ export class InventoryBranchController {
   /**
    * KEY ENDPOINT FOR YOUR SHOP:
    * "For this Gucci bag, which branches have it?"
-   * GET /api/inventory-branch/product/:productId/availability
+   * GET /inventory-branch/product/:productId/availability
    */
   @Get('product/:productId/availability')
   @HttpCode(HttpStatus.OK)
@@ -117,7 +117,7 @@ export class InventoryBranchController {
 
   /**
    * All stock at one branch (across all variants/products)
-   * GET /api/inventory-branch/branch/:branchId
+   * GET /inventory-branch/branch/:branchId
    */
   @Get('branch/:branchId')
   @HttpCode(HttpStatus.OK)
@@ -138,7 +138,7 @@ export class InventoryBranchController {
 
   /**
    * Summary stats for a branch
-   * GET /api/inventory-branch/branch/:branchId/summary
+   * GET /inventory-branch/branch/:branchId/summary
    */
   @Get('branch/:branchId/summary')
   @HttpCode(HttpStatus.OK)
@@ -159,7 +159,7 @@ export class InventoryBranchController {
 
   /**
    * All stock for one variant across all branches
-   * GET /api/inventory-branch/variant/:variantId
+   * GET /inventory-branch/variant/:variantId
    */
   @Get('variant/:variantId')
   @HttpCode(HttpStatus.OK)
@@ -191,7 +191,7 @@ export class InventoryBranchController {
 
   /**
    * Reserve stock (for customer checkout)
-   * POST /api/inventory-branch/reserve
+   * POST /inventory-branch/reserve
    */
   @Post('reserve')
   @HttpCode(HttpStatus.OK)
@@ -212,7 +212,7 @@ export class InventoryBranchController {
 
   /**
    * Release reservation (customer cancels / checkout timeout)
-   * POST /api/inventory-branch/release-reservation
+   * POST /inventory-branch/release-reservation
    */
   @Post('release-reservation')
   @HttpCode(HttpStatus.OK)
@@ -233,7 +233,7 @@ export class InventoryBranchController {
 
   /**
    * Commit reservation (payment succeeded, item is sold)
-   * POST /api/inventory-branch/commit-reservation
+   * POST /inventory-branch/commit-reservation
    */
   @Post('commit-reservation')
   @HttpCode(HttpStatus.OK)
@@ -254,7 +254,7 @@ export class InventoryBranchController {
 
   /**
    * Transfer stock between branches
-   * POST /api/inventory-branch/transfer
+   * POST /inventory-branch/transfer
    */
   @Post('transfer')
   @HttpCode(HttpStatus.OK)

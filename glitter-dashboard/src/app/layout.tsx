@@ -1,22 +1,20 @@
+import localFont from "next/font/local";
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, Inter } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 import { AuthProvider } from "@/features/auth/auth-provider";
 import { QueryProvider } from "@/lib/query-provider";
 import { Toaster } from "sonner";
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { ThemeProvider } from "next-themes";
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'});
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const googleSans = localFont({
+  src: [
+    { path: "/fonts/GoogleSans-Regular.ttf", weight: "400" },
+    { path: "/fonts/GoogleSans-Medium.ttf", weight: "500" },
+    { path: "/fonts/GoogleSans-Bold.ttf", weight: "700" },
+  ],
+  variable: "--font-google-sans",
 });
 
 export const metadata: Metadata = {
@@ -30,19 +28,30 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={cn("h-full", "antialiased", geistSans.variable, geistMono.variable, "font-sans", inter.variable)}
-    >
-      <body className="h-full">
-        <QueryProvider>
-          <AuthProvider>
-            <TooltipProvider>
-              {children}
-              <Toaster position="top-right" richColors />
-            </TooltipProvider>
-          </AuthProvider>
-        </QueryProvider>
+    <html lang="en" suppressHydrationWarning>
+      <body
+        className={cn(
+          "min-h-screen bg-background font-sans antialiased",
+          googleSans.variable
+        )}
+      >
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          <QueryProvider>
+            <AuthProvider>
+              <TooltipProvider>
+                <main className="relative flex flex-col min-h-screen">
+                  {children}
+                </main>
+                <Toaster position="top-right" richColors />
+              </TooltipProvider>
+            </AuthProvider>
+          </QueryProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

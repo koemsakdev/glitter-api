@@ -76,13 +76,13 @@ const fileFilter = (
 
 @ApiTags('Brands')
 @ApiBearerAuth()
-@Controller('api/brands')
+@Controller('brands')
 export class BrandsController {
   constructor(private readonly brandsService: BrandsService) {}
 
   /**
    * Create a new brand with logo upload
-   * POST /api/brands
+   * POST /brands
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -164,7 +164,7 @@ export class BrandsController {
 
   /**
    * Get all brands with pagination
-   * GET /api/brands?page=1&limit=10
+   * GET /brands?page=1&limit=10
    */
   @Get()
   @HttpCode(HttpStatus.OK)
@@ -203,7 +203,7 @@ export class BrandsController {
 
   /**
    * Get active brands only
-   * GET /api/brands/status/active
+   * GET /brands/status/active
    */
   @Get('status/active')
   @HttpCode(HttpStatus.OK)
@@ -223,7 +223,7 @@ export class BrandsController {
 
   /**
    * Get a specific brand by ID
-   * GET /api/brands/:id
+   * GET /brands/:id
    */
   @Get(':id')
   @HttpCode(HttpStatus.OK)
@@ -250,7 +250,7 @@ export class BrandsController {
 
   /**
    * Get a specific brand by slug
-   * GET /api/brands/slug/:slug
+   * GET /brands/slug/:slug
    */
   @Get('slug/:slug')
   @HttpCode(HttpStatus.OK)
@@ -277,7 +277,7 @@ export class BrandsController {
 
   /**
    * Update a brand with optional logo upload
-   * PATCH /api/brands/:id
+   * PATCH /brands/:id
    */
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
@@ -363,7 +363,7 @@ export class BrandsController {
 
   /**
    * Delete a brand
-   * DELETE /api/brands/:id
+   * DELETE /brands/:id
    */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)

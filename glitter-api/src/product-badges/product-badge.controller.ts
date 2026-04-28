@@ -35,7 +35,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiTags('Product Badges')
 @ApiBearerAuth()
-@Controller('api/product-badges')
+@Controller('product-badges')
 export class ProductBadgesController {
   constructor(private readonly badgesService: ProductBadgesService) {}
 
@@ -114,7 +114,7 @@ export class ProductBadgesController {
 
   /**
    * Cleanup expired badges (for cron jobs / admin cleanup)
-   * POST /api/product-badges/cleanup-expired
+   * POST /product-badges/cleanup-expired
    */
   @Post('cleanup-expired')
   @HttpCode(HttpStatus.OK)

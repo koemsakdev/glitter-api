@@ -24,7 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiBearerAuth()
-@Controller('api/branches')
+@Controller('branches')
 export class BranchesController {
   constructor(private readonly branchesService: BranchesService) {}
 
@@ -32,7 +32,7 @@ export class BranchesController {
   @Roles('admin', 'super_admin')
   /**
    * Create a new branch
-   * POST /api/branches
+   * POST /branches
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -43,7 +43,7 @@ export class BranchesController {
   @Public()
   /**
    * Get all branches with pagination
-   * GET /api/branches?page=1&limit=10
+   * GET /branches?page=1&limit=10
    */
   @Get()
   @HttpCode(HttpStatus.OK)
@@ -59,7 +59,7 @@ export class BranchesController {
   @Public()
   /**
    * Get all active branches
-   * GET /api/branches/status/active
+   * GET /branches/status/active
    */
   @Get('status/active')
   @HttpCode(HttpStatus.OK)
@@ -70,7 +70,7 @@ export class BranchesController {
   @Public()
   /**
    * Get a specific branch by ID
-   * GET /api/branches/:id
+   * GET /branches/:id
    */
   @Get(':id')
   @HttpCode(HttpStatus.OK)
@@ -81,7 +81,7 @@ export class BranchesController {
   @Public()
   /**
    * Get a specific branch by code
-   * GET /api/branches/code/:code
+   * GET /branches/code/:code
    */
   @Get('code/:code')
   @HttpCode(HttpStatus.OK)
@@ -93,7 +93,7 @@ export class BranchesController {
   @Roles('admin', 'super_admin')
   /**
    * Update a branch
-   * PATCH /api/branches/:id
+   * PATCH /branches/:id
    */
   @Patch(':id')
   @HttpCode(HttpStatus.OK)
@@ -108,7 +108,7 @@ export class BranchesController {
   @Roles('super_admin')
   /**
    * Delete a branch
-   * DELETE /api/branches/:id
+   * DELETE /branches/:id
    */
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)

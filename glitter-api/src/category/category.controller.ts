@@ -40,7 +40,7 @@ import { UpdateCategoryDto } from './dto/update-category.dto';
 
 @ApiTags('Categories')
 @ApiBearerAuth()
-@Controller('api/categories')
+@Controller('categories')
 export class CategoriesController {
   constructor(private readonly categoryService: CategoriesService) {}
 

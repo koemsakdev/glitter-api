@@ -75,7 +75,7 @@ const fileFilter = (
 
 @ApiTags('Users')
 @ApiBearerAuth()
-@Controller('api/users')
+@Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 

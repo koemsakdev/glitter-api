@@ -44,7 +44,7 @@ import { UpdateStaffDto } from './dto/update-staff.dto';
 @ApiTags('Staff')
 @ApiBearerAuth()
 @UseGuards(RolesGuard)
-@Controller('api/staff')
+@Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
 
